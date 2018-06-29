@@ -71,6 +71,7 @@ class Map:
         self.height = height 
         self.grid = np.zeros((int(height/resolution), int(width/resolution)))
         self.im1 = False
+        self.last_location = [0,0]
 
     def to_message(self):
         """ Return a nav_msgs/OccupancyGrid representation of this map. """
@@ -117,10 +118,13 @@ class Map:
         map_indices = self.xy_to_index(x, y)
         if map_indices == False:
             rospy.loginfo("Location outside of Radiation Map")
+            return
         elif addto == True:
             self.grid[map_indices[1]][map_indices[0]] += val
         else:
             self.grid[map_indices[1]][map_indices[0]] = val
+
+        self.last_location = [x,y]
 
 
     def xy_to_index(self, x, y):
@@ -141,76 +145,59 @@ class Map:
 
         #fig = plt.figure()
         if self.im1 == False:
-            print("hello1")
-            plt.figure()
-            plt.ion()
-            self.im1 = plt.imshow(self.grid, interpolation='none', origin = 'lower', extent = [self.origin_x, self.origin_x+self.width, self.origin_y, self.origin_y+self.height])
-            plt.xlabel('x position (m)')
-            plt.ylabel('y position (m)')
-            self.cbar = plt.colorbar()
-            print("hello2")
-            time.sleep(5)
-            #plt.show(block = False)
+            self.fig= plt.figure()
+            self.im1 = plt.imshow([[1,2],[3,4]], interpolation='none', origin = 'lower', extent = [DwellTime_Map.origin_x, DwellTime_Map.origin_x+DwellTime_Map.width, DwellTime_Map.origin_y, DwellTime_Map.origin_y+DwellTime_Map.height])
+            #self.location_marker = plt.scatter([self.last_location[0]],[self.last_location[1]], c='r', s=40)
+            plt.show(block = False)
+            print("Map Plot Created")
         else:
-            self.im1.set_data(self.grid)
-            self.cbar.set_clim(vmin=0, vmax=self.grid.max())
-            #self.cbar.draw_all()
-        
-        #plt.draw()
-        #plt.pause(0.000000000000001)
+            self.im1.set_data(np.rot90(self.grid, k = -1))
+            #self.location_marker.set_data([self.last_location[0]],[self.last_location[1]])
+            
+            self.fig.canvas.draw()
+            self.fig.canvas.flush_events()
+            print("Map updated")
 
-        #plt.show()
 
 #Global counter variables
-global DwellTimeMap #Dwell time at each map voxel in seconds
-global CountMap #Number of radiation coutns accumulated at each map voxel
-DwellTimeMap = Map()
-CountMap = Map()
-
-def plot_map(MyMap, replot=False):
-    if replot == False:
-        plt.figure()
-        plt.ion()
-        MyMap.im1 = plt.imshow(MyMap.grid, interpolation='none', origin = 'lower', extent = [MyMap.origin_x, MyMap.origin_x+MyMap.width, MyMap.origin_y, MyMap.origin_y+MyMap.height])
-        plt.xlabel('x position (m)')
-        plt.ylabel('y position (m)')
-        #MyMap.cbar = plt.colorbar()
-    else: 
-        MyMap.im1.set_data(MyMap.grid)
+global DwellTime_Map #Dwell time at each map voxel in seconds
+global Count_Map #Number of radiation coutns accumulated at each map voxel
+global trans
+DwellTime_Map = Map()
+Count_Map = Map()
 
 
+def ComputeGP(CPS_Map, lambda = 0.1):
+    #Use CPS map with parameters to compute GP estimates at every point
 
+    pass
+
+
+#---------------CallBacks------------------
 def callback(data):
-    global DwellTimeMap
-    global CountMap
+    global DwellTime_Map
+    global Count_Map 
+    global trans
     rospy.loginfo(rospy.get_caller_id() + 'I heard detector 1 at %s', data.data)
-    #CountMap += 1
+    Count_Map.set_cell(trans[0], trans[1], 1.0/float(ros_rate), addto=True)
+    
 
 def MappingMain1():
-    global DwellTimeMap
-    global CountMap
-    # In ROS, nodes are uniquely named. If two nodes with the same
-    # name are launched, the previous one is kicked off. The
-    # anonymous=True flag means that rospy will choose a unique
-    # name for our 'listener' node so that multiple listeners can
-    # run simultaneously.
+    global DwellTime_Map
+    global Count_Map
+    global trans
+    # Initialie node
     rospy.init_node('MappingMain1', anonymous=True)
 
+    #Set up subscribers
     rospy.Subscriber('/gamma1', String, callback)
 
     #Set up transform listener
     listener = tf.TransformListener()
 
-    #Initial plot
-    fig = plt.figure()
-    #plt.plot([3,5])
-    im1 = plt.imshow([[1,2],[3,4]], interpolation='none', origin = 'lower', extent = [DwellTimeMap.origin_x, DwellTimeMap.origin_x+DwellTimeMap.width, DwellTimeMap.origin_y, DwellTimeMap.origin_y+DwellTimeMap.height])
-    #cbar = plt.colorbar()
-    plt.show(block = False)
-    time.sleep(1)
-
-
-
+    #Set up CPS maps
+    CPS_Map = Map()
+    CPS_GP_Map = Map()
 
     ros_rate = 10
     last_plot_time = time.time()
@@ -223,20 +210,20 @@ def MappingMain1():
             continue
         print("trans" +  repr(trans))
 
-        #Update DwellTimeMap each time through the loop
-        DwellTimeMap.set_cell(trans[0], trans[1], 1.0/float(ros_rate), addto=True)
-        #DwellTimeMap.set_cell(trans[0], trans[1], 5, addto=True) #temp or loc
+        #Update DwellTime_Map each time through the loop
+        DwellTime_Map.set_cell(trans[0], trans[1], 1.0/float(ros_rate), addto=True)
+
+        #Update CPS maps
+
+        #DwellTime_Map.set_cell(trans[0], trans[1], 5, addto=True) #temp or loc
         #print(time.time())
 
         #Only update map at a given rate (hz)
         map_rate = 1; 
         if time.time() > last_plot_time + 1/map_rate:
             last_plot_time = time.time()
-            print("Max Grid Value: " + repr(DwellTimeMap.grid.max()))
-            im1.set_data(np.rot90(DwellTimeMap.grid, k = -1))
-            #cbar.set_clim(vmin=0, vmax=DwellTimeMap.grid.max())
-            fig.canvas.draw()
-            fig.canvas.flush_events()
+            print("Max Grid Value: " + repr(DwellTime_Map.grid.max()))
+            DwellTime_Map.plot_map()
 
         rate.sleep()
 
