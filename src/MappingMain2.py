@@ -173,6 +173,28 @@ def ComputeGP(CPS_Map, lambda = 0.1):
     pass
 
 
+def SimulationRadation(current_location):
+    rad = 0
+
+    background_rate = 2
+    rad += GenerateRandomRadation(background_rate)
+
+    #Source locations in map frame
+    source_locations = [[1,1],[-.75, -.5]]
+
+
+    for source in source_locations:
+        #Generate radiation depending on source location
+        pass
+
+    return rad
+
+
+
+def GenerateRandomRadation(source_activity): 
+    #Generate random radiation samples based upon activity
+    pass
+
 #---------------CallBacks------------------
 def callback(data):
     global DwellTime_Map
