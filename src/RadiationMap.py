@@ -1,32 +1,9 @@
-#!/usr/bin/env python
-# Software License Agreement (BSD License)
-#
-
-## Main radiation mapping function
-## Listens to radiation count data
-## Updates map with radiation count data
-## Updates map with dwell time data
-## Performs Gaussian Process update
-## 
-
-import rospy
-from std_msgs.msg import UInt32, String
-from nav_msgs.msg import OccupancyGrid, MapMetaData
-from geometry_msgs.msg import Pose, Point, Quaternion
-from sensor_msgs.msg import LaserScan
-import tf
-
-import math
-import time
 import numpy as np
+import math
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import pylab
-import matplotlib.image as mpimg
-from matplotlib import cm
-import matplotlib.mlab as mlab
+import copy
+import rospy
 
-#Define Classes 
 class Map:
     """ 
     The Map class stores an occupancy grid as a two dimensional
@@ -46,8 +23,8 @@ class Map:
     with increasing row number. 
     """
 
-    def __init__(self, origin_x=-2, origin_y=-2, resolution=.1, 
-                 width=4, height=4):
+    def __init__(self, origin_x=-3, origin_y=-3, resolution=.1, 
+                 width=6, height=6):
         """ Construct an empty occupancy grid.
         
         Arguments: origin_x, 
@@ -155,7 +132,7 @@ class Map:
 
         x_i = math.floor((x-self.origin_x)/self.resolution)
         y_i = math.floor((y-self.origin_y)/self.resolution)
-        if x_i < 0 or x_i >= len(self.grid[1]):
+        if x_i < 0 or x_i >= len(self.grid[0]):
             return False
         if y_i < 0 or y_i >= len(self.grid):
             return False
@@ -168,7 +145,7 @@ class Map:
         #fig = plt.figure()
         if self.im1 == False:
             self.fig= plt.figure()
-            self.im1 = plt.imshow([[1,2],[3,4]], interpolation='none', origin = 'lower', extent = [DwellTime_Map.origin_x, DwellTime_Map.origin_x+DwellTime_Map.width, DwellTime_Map.origin_y, DwellTime_Map.origin_y+DwellTime_Map.height])
+            self.im1 = plt.imshow([[1,2],[3,4]], interpolation='none', origin = 'lower', extent = [self.origin_x, self.origin_x+self.width, self.origin_y, self.origin_y+self.height])
             #self.location_marker = plt.scatter([self.last_location[0]],[self.last_location[1]], c='r', s=40)
             plt.show(block = False)
             print("Map Plot Created")
@@ -178,158 +155,105 @@ class Map:
             
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
-            print("Map updated")
-
-
-#Global counter variables
-global DwellTime_Map #Dwell time at each map voxel in seconds
-global Count_Map #Number of radiation coutns accumulated at each map voxel
-global trans
-DwellTime_Map = Map()
-Count_Map = Map()
-
-
-def ComputeGP(CPS_Map, lambda1 = 0.1):
-    #Use CPS map with parameters to compute GP estimates at every point
-
-    pass
-
-class RadiationSource:
-    def __init__(self, activity, position, background_flag = False):
-        self.activity = activity
-        self.position = position #Position in x,y
-        self.x = 0.002 #Cross sectional area
-        self.background_flag = background_flag
-
-    def GenerateRandomRadiation(self, current_location, delta_t):
-        #Generate random radiation samples based upon activity
-        if self.background_flag == False:
-            dist_2 = np.linalg.norm([current_location[0] - self.position[0], current_location[1] - self.position[1]])
-            v = self.x * self.activity * delta_t / (2*self.x + dist_2)
-
-            rad = np.random.poisson(v, 1)
-            return rad[0]
-        else:
-            rad = np.random.poisson(self.activity*delta_t, 1)
-            return rad[0]
 
 
 
-def SimulationRadation(current_location, sources, delta_t):
-    rad = 0
+class GP_Map(Map):
+    def __init__(self, origin_x=-3, origin_y=-3, resolution=.1, width=6, height=6, background = 1, Lambda = 0.2):
+        Map.__init__(self, origin_x, origin_y, resolution, width, height)
 
-    for source in sources:
-        rad += source.GenerateRandomRadiation(current_location, delta_t)
+        #compute Kss
+        self.grid2 = copy.deepcopy(self.grid)
+        self.background = background
+        self.sigma_n = 5
+        self.sigma_f = 5
+        self.Lambda = Lambda
+        self.Kss = self.Make_Kss()
 
-    return rad
+
+    def Make_Kss(self):
+        #Make K_ss from my map
+        y_pts = np.linspace(self.origin_y, self.origin_y + self.height, len(self.grid), endpoint = False)
+        x_pts = np.linspace(self.origin_x, self.origin_x + self.width, len(self.grid[0]), endpoint = False)
+
+        K_ss = np.zeros((len(y_pts)*len(x_pts),len(y_pts)*len(x_pts)))
+
+        for y_i in range(0,len(K_ss)):
+            for x_i in range(0,len(K_ss[y_i])):
+                y_pt1 = y_pts[int(math.floor(y_i / len(x_pts)))]
+                x_pt1 = x_pts[y_i % len(x_pts)]
+
+                y_pt2 = y_pts[int(math.floor(x_i / len(x_pts)))]
+                x_pt2 = x_pts[x_i % len(x_pts)]
 
 
-#---------------CallBacks------------------
-def callback(data):
-    global DwellTime_Map
-    global Count_Map 
-    global trans
-    rospy.loginfo(rospy.get_caller_id() + 'I heard detector 1 at %s', data.data)
-    Count_Map.set_cell(trans[0], trans[1], 1.0/float(ros_rate), addto=True)
-    
+                diff = [y_pt1 - y_pt2, x_pt1 - x_pt2]
 
-def MappingMain1():
-    global DwellTime_Map
-    global Count_Map
-    global trans
-    # Initialie node
-    rospy.init_node('MappingMain1', anonymous=True)
+                K_ss[y_i][x_i] = np.exp(-1.0 * np.linalg.norm(diff)**2 / (2*self.Lambda**2))
 
-    #Set up subscribers
-    rospy.Subscriber('/gamma1', String, callback)
+        return self.sigma_f**2 * K_ss
 
-    #Set up transform listener
-    listener = tf.TransformListener()
 
-    #Define radation sources for simulation
-    Radiation_Simulation_Flag = True
-    Radiation_Sources = []
-    Radiation_Sources.append(RadiationSource(2,[0,0],background_flag=True))
-    Radiation_Sources.append(RadiationSource(500,[1.5,1.5]))
-    RadSimDelta_t1 = time.time()
-    RadSimDelta_t2 = time.time()
+    def Calc_GP(self, MyMap_DwellTime, MyMap_CPS):
 
-    #Set up CPS maps
-    CPS_Map = Map()
-    CPS_GP_Map = Map()
+        [K, Ks, y_train, y_train_var] = self.Generate_K_Ks(MyMap_DwellTime, MyMap_CPS)
 
-    ros_rate = 10
-    last_plot_time = time.time()
-    rate = rospy.Rate(ros_rate) # 10hz
-    while not rospy.is_shutdown():
-        #Get transform to baselink
-        try:
-            (trans, rot) = listener.lookupTransform('map', '/base_link',  rospy.Time(0))
-        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            continue
-        #print("trans" +  repr(trans))
+        y_train = y_train - self.background
 
-        #Update DwellTime_Map each time through the loop
-        DwellTime_Map.set_cell(trans[0], trans[1], 1.0/float(ros_rate), addto=True)
+        if len(K) == 0:
+            return
 
-        #Generate Random Radation
-        if Radiation_Simulation_Flag:
-            RadSimDelta_t2 = time.time()
-            Sim_Rad = SimulationRadation([trans[0],trans[1]], Radiation_Sources, RadSimDelta_t2 - RadSimDelta_t1)
-            RadSimDelta_t1 = RadSimDelta_t2
+        L = np.linalg.cholesky(K + self.sigma_n**2 * np.diag(y_train_var))
+        alpha = np.linalg.solve(L.T, np.linalg.solve(L, y_train.reshape((len(y_train),1))))
+        y_test= np.maximum(0,np.dot(Ks, alpha) + self.background)
 
-            #Update Count_Map
-            Count_Map.set_cell(trans[0], trans[1], Sim_Rad, addto=True)
-        
-        #Update CPS maps
-        CPS = Count_Map.get_cell(trans[0], trans[1]) / DwellTime_Map.get_cell(trans[0], trans[1]) 
-        CPS_Map.set_cell(trans[0], trans[1], CPS, addto=False)
+        v = np.linalg.solve(L, Ks.T)
+        y_test_var = np.diag(self.Kss - np.dot(v.T, v))
+
+        self.grid = self.Reshape_1D_to_2D(np.reshape(y_test,(1,len(y_test)))[0], MyMap_CPS.grid)
+        self.grid2 = self.Reshape_1D_to_2D(y_test_var, MyMap_CPS.grid)
+
+
+
+    def Generate_K_Ks(self, MyMap_DwellTime, MyMap_CPS):
+        #Generate matrices for GP algorithm based on where samples have been taken
+        #Returns:
+        # -Ks: covariance matrix between train and test points
+        # -K: covariance matrix between test points
+        # -y_test: CPS values at test points
+        # -y_test_var: Varaince of CPS values at test points
+        DwellTime_1D = self.Reshape_2D_to_1D(MyMap_DwellTime.grid)
+        CPS_1D = self.Reshape_2D_to_1D(MyMap_CPS.grid)
         
 
-        #DwellTime_Map.set_cell(trans[0], trans[1], 5, addto=True) #temp or loc
-        #print(time.time())
-
-        #Only update map at a given rate (hz)
-        map_rate = 1; 
-        if time.time() > last_plot_time + 1/map_rate:
-            last_plot_time = time.time()
-            print("Max Grid Value: " + repr(CPS_Map.grid.max()))
-            DwellTime_Map.plot_map()
-
-            CPS_Map.plot_map()
-
-        rate.sleep()
-
-if __name__ == '__main__':
-    try:
-        MappingMain1()
-    except rospy.ROSInterruptException:
-        pass
-
-"""ROS commands:
-roslaunch turtlebot3_slam turtlebot3_slam.launch slam_methods:=frontier_exploration 
-rosrun radiation_mapping MappingMain1.py 
-roslaunch turtlebot3_bringup turtlebot3_robot.launch
-ssh bloodhound@192.168.207.14
-rosrun rqt_tf_tree rqt_tf_tree
-rosrun tf tf_echo /map /base_link
+        mask = DwellTime_1D > 0
 
 
-"""
+        Ks = self.Kss[mask]
+        #print(Ks)
+        Ks = np.transpose(Ks)
+
+        K  = Ks[mask]
+
+        y_train = np.asarray(CPS_1D[mask])
+        y_dwelltime = np.asarray(DwellTime_1D[mask])
+        y_train_var = 1/y_dwelltime
 
 
+        return [K, Ks, y_train, y_train_var]
 
 
+    def Reshape_2D_to_1D(self, A):
+        return np.reshape(A,(1,len(A)*len(A[0])))[0]
 
 
+    def Reshape_1D_to_2D(self, A,B):
+        return np.reshape(A,np.shape(B))
 
+    def Plot_GP(self):
+        fig, (ax1, ax2) = plt.subplots(1, 2)
 
+        ax1.imshow(self.grid, interpolation='none', origin = 'lower', extent = [self.origin_x, self.origin_x+self.width, self.origin_y, self.origin_y+self.height])
+        ax2.imshow(self.grid2, interpolation='none', origin = 'lower', extent = [self.origin_x, self.origin_x+self.width, self.origin_y, self.origin_y+self.height])
 
-
-
-
-
-
-
-
-
+        plt.show()
