@@ -158,7 +158,7 @@ class Map:
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
 
-    def plot_map(self, currentLocation):
+    def plot_map(self, currentLocation = [0, 0]):
         #Plot map with mocation marked
 
                 #fig = plt.figure()
