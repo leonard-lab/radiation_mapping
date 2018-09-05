@@ -121,6 +121,7 @@ def callback_costmap(data):
             tmp = np.array(data.data)
             tmp = (tmp >= threshold)
             Binary_Cost_Map.grid = tmp.reshape(Binary_Cost_Map.grid.shape[0], Binary_Cost_Map.grid.shape[1])
+            Binary_Cost_Map.last_update = time.time()
         else:
             rospy.loginfo("Problem: Costmap and Binary_Cost_Map out of shape")
         #rospy.loginfo(tmp.shape)
@@ -285,7 +286,7 @@ def MappingMain1():
             #Save Data
             np.save('Map_Data/GP_Map_' + repr(time.time()), GP_Map.grid)
             np.save('Map_Data/CPS_Map_' + repr(time.time()), CPS_Map.grid)
-
+            np.save('Map_Data/Mask_Map_' + repr(time.time()), Mask_Map.grid)
 
         #### not working workaround...
         # map_rate = .5

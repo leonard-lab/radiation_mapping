@@ -45,9 +45,10 @@ class Map:
         self.origin_x = origin_x
         self.origin_y = origin_y
         self.resolution = resolution
+        self.last_update = time.time()
         self.width = width 
         self.height = height 
-        self.grid = np.zeros((int(height/resolution), int(width/resolution)))
+        self.grid = np.zeros((int(height/resolution), int(width/resolution)), dtype='int8')
         self.im1 = False
         self.last_location = [0,0]
 
@@ -186,6 +187,7 @@ class GP_Map(Map):
 
         
         self.background = background
+        self.grid = np.zeros((int(height/resolution), int(width/resolution)), dtype='float32')
         self.grid2 = copy.deepcopy(self.grid)
         self.grid += self.background
         self.sigma_n = 5
