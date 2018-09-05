@@ -56,7 +56,8 @@ def TargetSelection(currentPosition, GPMap, maskMap, threshold):
             if Q[y_i][x_i] > 0:
                 delta = [currentPosition[0] - xyMap[y_i][x_i][0], currentPosition[1] - xyMap[y_i][x_i][1]]
                 theta = np.arctan2(delta[1],delta[0])
-                distMap[y_i][x_i] = np.linalg.norm(delta) + abs(np.sin(theta/2)) * TurnPenalty
+                #distMap[y_i][x_i] = np.linalg.norm(delta) + abs(np.sin(theta/2)) * TurnPenalty
+                distMap[y_i][x_i] = np.sqrt(delta[0]**2 + delta[1]**2) + abs(np.sin(theta/2)) * TurnPenalty
             else:
                 distMap[y_i][x_i] = maxDist + 1
 

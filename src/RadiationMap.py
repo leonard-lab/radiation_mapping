@@ -25,7 +25,7 @@ class Map:
     """
 
     def __init__(self, origin_x=-2, origin_y=-2, resolution=.1, 
-                 width=4, height=4):
+                 width=4, height=4, dtype = 'float32'):
         """ Construct an empty occupancy grid.
         
         Arguments: origin_x, 
@@ -48,7 +48,7 @@ class Map:
         self.last_update = time.time()
         self.width = width 
         self.height = height 
-        self.grid = np.zeros((int(height/resolution), int(width/resolution)), dtype='int8')
+        self.grid = np.zeros((int(height/resolution), int(width/resolution)), dtype=dtype)
         self.im1 = False
         self.last_location = [0,0]
 
@@ -197,7 +197,7 @@ class GP_Map(Map):
 
         #compute Kss
         self.Kss = self.Make_Kss()
-        self.padding = 10
+        self.padding = 16
         self.Kss_Local = self.Make_Kss(localFlag = True)
 
 
@@ -275,6 +275,7 @@ class GP_Map(Map):
 
 
     def Calc_GP_Local(self, MyMap_DwellTime, MyMap_CPS, currentLocation):
+
         map_indices = self.xy_to_index(currentLocation[0], currentLocation[1])
 
         #Make padded DwellTime and CPS maps
@@ -306,7 +307,7 @@ class GP_Map(Map):
 
 
         #Take subsample of GP Points
-        GP_padding = 4
+        GP_padding = 6
         for k in range(0,GP_padding):
             for i in range(0,len(y_test_Padded_GP)):
                 y_test_Padded_GP[i][k] = np.nan
