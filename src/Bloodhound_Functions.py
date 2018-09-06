@@ -15,9 +15,10 @@ def TargetSelection(currentPosition, GPMap, maskMap, threshold):
 
     #Generate Q values for each valid point in maskMap
     explorationConstant = .5
-    Q = maskMap.grid * (GPMap.grid + GPMap.grid2 * explorationConstant)
+    offset = int((len(maskMap.grid) - len(GPMap.grid))/2)
+    Q = maskMap.grid[offset:offset+len(GPMap.grid), offset:offset+len(GPMap.grid)] * (GPMap.grid + GPMap.grid2 * explorationConstant)
 
-    AlarmLocation = maskMap.grid * (GPMap.grid - GPMap.grid2 * AlarmThreshold)
+    AlarmLocation = maskMap.grid[offset:offset+len(GPMap.grid), offset:offset+len(GPMap.grid)]  * (GPMap.grid - GPMap.grid2 * AlarmThreshold)
 
     #Select all Q values above threshold
     Q_orig = copy.deepcopy(Q)

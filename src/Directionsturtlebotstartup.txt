@@ -1,0 +1,34 @@
+Directions turtlebot startup
+
+
+On Turtlebot:
+
+ssh bloodhound@192.168.207.14
+rosrun rosserial_python serial_node.py _port:=/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_AH06N802-if00-port0 _baud:=57600
+roslaunch turtlebot3_bringup turtlebot3_robot.launch
+
+
+
+On Master:
+
+roscore
+
+rosrun radiation_mapping Turtlebot_sensor_tf.py
+roslaunch turtlebot3_slam turtlebot3_slam.launch slam_methods:=frontier_exploration 
+rosrun radiation_mapping MappingMain7.py
+rosun radiation_mapping DwellTimeMapUpdates.py
+
+rosrun radiation_mapping RadiationSimulator.py 
+
+
+
+
+
+Notes:
+Map will clear when the bringup command is run again on the turtlebot
+In rviz +x is up.  
+Goal orientation in /move_base_simple/goal is a quaternion
+
+
+Helpful fuctions:
+rosrun rqt_graph rqt_graph

@@ -13,8 +13,9 @@ import rospy
 from std_msgs.msg import UInt32, String
 from nav_msgs.msg import OccupancyGrid, MapMetaData
 from map_msgs.msg import OccupancyGridUpdate
-from geometry_msgs.msg import Pose, Point, Quaternion
+from geometry_msgs.msg import Pose, Point, Quaternion, PoseStamped
 from sensor_msgs.msg import LaserScan
+from move_base_msgs.msg import MoveBaseActionGoal
 import tf
 
 import math
@@ -26,6 +27,7 @@ import pylab
 import matplotlib.image as mpimg
 from matplotlib import cm
 import matplotlib.mlab as mlab
+from Bloodhound_Functions import *
 
 #Define Classes 
 import RadiationMap
@@ -41,20 +43,15 @@ global RecordMapParameters
 global GPMapParameters
 
 #Map parameters
-MapWidth = 10.0001
+MapWidth = 4.0001
+MaskMapWidth = 19.200001
 RecordMapParameters = [-MapWidth/2, -MapWidth/2, 0.05, MapWidth, MapWidth]
 GPMapParameters = [-MapWidth/2, -MapWidth/2, 0.05, MapWidth, MapWidth]
+MaskMapParameters = [-MaskMapWidth/2, -MaskMapWidth/2, 0.05, MaskMapWidth, MaskMapWidth]
 
 DwellTime_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'float32')
 Count_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'int16')
 
-def SimulationRadation(current_location, sources, delta_t):
-    rad = 0
-
-    for source in sources:
-        rad += source.GenerateRandomRadiation(current_location, delta_t)
-
-    return rad
 
 
 #---------------CallBacks------------------
@@ -111,8 +108,12 @@ def callback_dwelltimeupdate(data):
     global CPS_Map
 
     DwellTime_Map.set_cell(data.x, data.y, data.z, addto=True)
-    CPS = Count_Map.get_cell(data.x, data.x) / DwellTime_Map.get_cell(data.x, data.x) 
+    CPS = Count_Map.get_cell(data.x, data.y) / DwellTime_Map.get_cell(data.x, data.y) 
     CPS_Map.set_cell(data.x, data.y, CPS, addto=False)
+
+    if np.isnan(CPS_Map.get_cell(data.x, data.y)):
+        print("ALERT: NAN GENERATED in callback_dwelltimeupdate")
+        CPS_Map.set_cell(data.x, data.y, 1, addto=False)
 
     
 def callback_costmap(data):
@@ -123,7 +124,7 @@ def callback_costmap(data):
     map_rate = .5
     if time.time() > last_cost_update_time + 1/map_rate:
         last_cost_update_time = time.time()
-        rospy.loginfo("Costmap callback started (fixed frequency)")
+        #rospy.loginfo("Costmap callback started (fixed frequency)")
 
         #rospy.loginfo(Binary_Cost_Map.grid.shape)
         if Binary_Cost_Map.grid.shape[0] * Binary_Cost_Map.grid.shape[1] == len(data.data):
@@ -133,15 +134,17 @@ def callback_costmap(data):
             Binary_Cost_Map.last_update = time.time()
         else:
             rospy.loginfo("Problem: Costmap and Binary_Cost_Map out of shape")
+            print(Binary_Cost_Map.grid.shape[0] * Binary_Cost_Map.grid.shape[1])
+            print(len(data.data))
         #rospy.loginfo(tmp.shape)
 
-        rospy.loginfo("Costmap callback ended (after {:.3f})".format(time.time() - last_cost_update_time)) 
+        #rospy.loginfo("Costmap callback ended (after {:.3f})".format(time.time() - last_cost_update_time)) 
         #rospy.loginfo(data.data)
 
 def callback_map(data):
     global Binary_Cost_Map
     global Mask_Map
-    rospy.loginfo("Map callback called")
+    #rospy.loginfo("Map callback called")
 
     last_map_update_time = time.time()
     if Mask_Map.grid.shape[0] * Mask_Map.grid.shape[1] == len(data.data):
@@ -157,7 +160,7 @@ def callback_map(data):
         # print(len(Mask_Map.grid[Mask_Map.grid == 1]))
     else:
         rospy.loginfo("Problem: Map and Mask_Map out of shape")
-    rospy.loginfo("Map callback ended (after {:.3f})".format(time.time() - last_map_update_time)) 
+    #rospy.loginfo("Map callback ended (after {:.3f})".format(time.time() - last_map_update_time)) 
 
 def MappingMain1():
     global DwellTime_Map
@@ -175,13 +178,14 @@ def MappingMain1():
 
     #Decision-making parameters
     threshold = 10
+    targetPosition = [0,0,0]
 
     #Set up CPS maps
     CPS_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'float32')
     GP_Map = RadiationMap.GP_Map(*RecordMapParameters)
-    Binary_Cost_Map = RadiationMap.Map(*RecordMapParameters, dtype = bool)
+    Binary_Cost_Map = RadiationMap.Map(*MaskMapParameters, dtype = bool)
     #Binary_Cost_Map.grid = np.full((384, 384), False, dtype = bool)
-    Mask_Map = RadiationMap.Map(*RecordMapParameters, dtype = bool)
+    Mask_Map = RadiationMap.Map(*MaskMapParameters, dtype = bool)
     Mask_Map.grid = np.full((384, 384), -1)
 
     rospy.loginfo("Maps Created")
@@ -196,19 +200,20 @@ def MappingMain1():
     rospy.Subscriber('/gamma1', UInt32, callback_gamma1)
     rospy.Subscriber('/gamma2', UInt32, callback_gamma2)
     rospy.Subscriber('/gamma3', UInt32, callback_gamma3)
-
-    rospy.Subscriber(('/bloodhound/dwelltimeupdate', Point, callback_dwelltimeupdate)
-
+    rospy.Subscriber('/bloodhound/dwelltimeupdate', Point, callback_dwelltimeupdate)
     rospy.Subscriber('/move_base/global_costmap/costmap', OccupancyGrid, callback_costmap)
     rospy.Subscriber('/map', OccupancyGrid, callback_map)
     
-    #Define radation sources for simulation
-    Radiation_Simulation_Flag = False
-    Radiation_Sources = []
-    Radiation_Sources.append(RadiationSource.RadiationSource(2,[0,0],background_flag=True))
-    Radiation_Sources.append(RadiationSource.RadiationSource(500,[0,1]))
-    RadSimDelta_t1 = time.time()
-    RadSimDelta_t2 = time.time()
+    #Setup publisher
+    GoalSimpletoPublish = PoseStamped()
+    QuaternionPublisher = Quaternion()
+    GoalSimplePublisher = rospy.Publisher('/move_base_simple/goal', PoseStamped, queue_size=10)
+    GoalPublisher = rospy.Publisher('/move_base/goal', MoveBaseActionGoal, queue_size=10)
+    GoalSimpletoPublish.header.frame_id = "map"
+
+
+    GoaltoPublish = MoveBaseActionGoal()
+    GoaltoPublish.goal.target_pose.header.frame_id = "map"
 
     ros_rate = 10
     last_gp_time = time.time()
@@ -218,6 +223,7 @@ def MappingMain1():
     last_cost_update_time = time.time()
     last_dwell_time = time.time()
     rate = rospy.Rate(ros_rate) # 10hz
+
     while not rospy.is_shutdown():
         #Get transform to baselink
         try:
@@ -226,34 +232,6 @@ def MappingMain1():
             continue
         #print("trans" +  repr(trans))
 
-        #Update DwellTime_Map each time through the loop
-        if Radiation_Simulation_Flag: #For simulation update with robot center
-            DwellTime_Map.set_cell(trans[0], trans[1], time.time() - last_dwell_time, addto=True)
-
-        last_dwell_time = time.time()
-
-        #Generate Random Radation
-        if Radiation_Simulation_Flag:
-            RadSimDelta_t2 = time.time()
-            Sim_Rad = SimulationRadation([trans[0],trans[1]], Radiation_Sources, RadSimDelta_t2 - RadSimDelta_t1)
-            RadSimDelta_t1 = RadSimDelta_t2
-
-            #Update Count_Map
-            Count_Map.set_cell(trans[0], trans[1], Sim_Rad, addto=True)
-
-
-        
-            #Update CPS maps
-            try:
-                CPS = Count_Map.get_cell(trans[0], trans[1]) / DwellTime_Map.get_cell(trans[0], trans[1]) 
-                CPS_Map.set_cell(trans[0], trans[1], CPS, addto=False)
-            except:
-                print("Error Updating CPS Map")
-                pass
-        
-
-        #DwellTime_Map.set_cell(trans[0], trans[1], 5, addto=True) #temp or loc
-        #print(time.time())
 
 
 
@@ -265,7 +243,9 @@ def MappingMain1():
             #CPS_map.grid = Count_Map.grid / DwellTime_Map.grid
 
             #Update GP
-            GP_Map.Calc_GP_Local(DwellTime_Map, CPS_Map, [trans[0], trans[1], np.degrees(rot)])
+            euler_rot = tf.transformations.euler_from_quaternion(rot)
+            GP_Map.Calc_GP_Local(DwellTime_Map, CPS_Map, [trans[0], trans[1], np.degrees(euler_rot[2])])
+            print("Max of GP Map %f: " %(np.max(GP_Map.grid)))
 
             last_gp_time = time.time()
             #print("Max Grid Value: " + repr(CPS_Map.grid.max()))
@@ -293,9 +273,31 @@ def MappingMain1():
         target_rate = .5; 
         if time.time() > last_target_time + 1/target_rate:
             [targetPosition, Q_orig, Q_binary] = TargetSelection([trans[0], trans[1], np.degrees(rot)], GP_Map, Mask_Map, threshold)
-            
+            print(targetPosition)
             last_target_time = time.time()
+            targetPosition = [0,0,0]
+
             #Publish target commands
+            euler_rot = tf.transformations.euler_from_quaternion(rot)
+            GoalQuaternion = tf.transformations.quaternion_from_euler(0,0,0)
+            print("GoalQuaternion")
+            print(GoalQuaternion)
+
+
+            GoalSimpletoPublish.pose.position.x = targetPosition[0]
+            GoalSimpletoPublish.pose.position.y = targetPosition[1]
+            GoalSimpletoPublish.pose.orientation.w = 1
+            
+
+            GoaltoPublish.goal.target_pose.pose.position.x = targetPosition[0]
+            GoaltoPublish.goal.target_pose.pose.position.y = targetPosition[1]
+            GoaltoPublish.goal.target_pose.pose.orientation.w = 1
+
+            #GoaltoPublish.pose.orientation = tf.transformations.quaternion_from_euler(targetPosition[0], targetPosition[1], targetPosition[2])
+
+            GoalSimplePublisher.publish(GoalSimpletoPublish)
+            GoalPublisher.publish(GoaltoPublish)
+
 
 
         #Save data for later plotting

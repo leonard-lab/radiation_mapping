@@ -298,7 +298,6 @@ class GP_Map(Map):
         #Make K and Ks 
         [K, Ks, y_train, y_train_var] = self.Generate_K_Ks(DwellTime_Padded, CPS_Padded, localFlag = True)
 
-
         #Compute GP
         [y_test, y_test_var] = self.Calc_GP_Kernel(K, Ks, y_train, y_train_var, localFlag = True)
 
