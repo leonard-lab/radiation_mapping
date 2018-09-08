@@ -15,7 +15,7 @@ from Bloodhound_Functions import *
 
 
 #General Parameters
-T = 60*2
+T = 10
 dt = 0.1
 t = 0
 #currentPosition = [np.random.rand()*3.8-1.9, np.random.rand()*3.8-1.9,np.random.rand()*360]
@@ -26,7 +26,7 @@ robotRadius = 0.1 #robot radius in meters
 threshold = 10
 frameCnt = 0
 timer = [0]*10
-MapWidth = 4.0001
+MapWidth = 10.0001
 RecordMapParameters = [-MapWidth/2, -MapWidth/2, 0.05, MapWidth, MapWidth]
 GPMapParameters = [-MapWidth/2, -MapWidth/2, 0.05, MapWidth, MapWidth]
 
@@ -50,8 +50,8 @@ for i in range(0,len(Mask_Map.grid)):
 
 
 #Plot Setup
-lU = 0#60
-lL = len(DwellTime_Map.grid)#140
+lU = 60
+lL = 140
 #PlotList = [[DwellTime_Map.grid, Count_Map.grid],[GP_Map.grid, GP_Map.grid2],[Q_orig,Q_binary]]
 PlotTitles = [["Dwell Time","Counts"],["GP Mean","GP Variance"],["Q","Q after Threshold"]]
 
@@ -136,9 +136,11 @@ while t < T:
 
 
     #Select Target location
-    targetRate = 1
+    targetRate = .1
     if frameCnt % math.ceil(targetRate/dt) == 0:
+        t1 = time.time()
         [targetPosition, Q_orig, Q_binary] = TargetSelection(currentPosition, GP_Map, Mask_Map, threshold)
+        print("Target selection time: %f" %(1000*(time.time() - t1)))
 
     #Move right and up
     move = [0.5, 0.5, 0]
@@ -174,9 +176,10 @@ while t < T:
 
     #Update GP
     #GP_Map.Calc_GP(DwellTime_Map, CPS_Map)
-    start = time.clock()
+    start = time.time()
     GP_Map.Calc_GP_Local(DwellTime_Map, CPS_Map, currentPosition)
-    timer[int(t/dt) % len(timer)] = 1000*(time.clock() - start)
+    print("GP Local time: %f" %(1000*(time.time() - start)))
+    #timer[int(t/dt) % len(timer)] = 1000*(time.clock() - start)
     #print(np.mean(timer))
 
 

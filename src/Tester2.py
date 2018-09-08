@@ -92,39 +92,75 @@ from Bloodhound_Functions import *
 # im_ani = animation.ArtistAnimation(fig, ims, interval = 500, repeat_delay = 3000, blit = True)
 # im_ani.save('vidTest.mp4',metadata = {'artist':'Peter'})
 
-pool = ThreadPool(processes=1)
+t1 = time.time()
+totaltime = []
 
-def foo(bar, baz):
-  print 'hello {0}'.format(bar)
-  return 'foo' + baz
+cumtime = []
 
-async_result = pool.apply_async(foo, ('world', 'foo')) # tuple of args for foo
+t2 = time.time()
 
-# do some other stuff in the main process
+for i in range(0,20):
+    MapWidth = 10.001
 
-return_val = async_result.get()  # get the return value from your function.
+    GPMapParameters = [-MapWidth/2, -MapWidth/2, 0.05, MapWidth, MapWidth]
+
+    
+    GPMap = RadiationMap.GP_Map(*GPMapParameters) #0.0089
+
+    
+    Q = copy.deepcopy(GPMap.grid) #0.000058
+
+    currentPosition = [3,3,0]
+
+    TurnPenalty = 10.1
+    maxDist = 10
+
+    
+    #Choose closest Q value by eulidean distance, with penalty for angle change
+    xyMap = GPMap.xyMap #grid map with each xy position of grid cell center
+    
+
+    distMap = np.zeros([len(GPMap.grid), len(GPMap.grid[0])]) 
+
+    #Go over nearby cells first, try to find match
+
+    
+    delta = []
+
+    delta.append(xyMap[:,:,0] - currentPosition[0]) 
+    delta.append(xyMap[:,:,1] - currentPosition[1])
+    thetaA = currentPosition[2] - np.arctan2(delta[1],delta[0])
+
+    distMap = np.sqrt(delta[0]**2 + delta[1]**2) + abs(np.sin(thetaA/2)) * TurnPenalty 
+    distMap[Q == 0] = maxDist + 1
+
+    # for y_i in range(0,len(xyMap)):
+    #     for x_i in range(0,len(xyMap[y_i])):
+            
+
+    #         if Q[y_i][x_i] > 0:
+                
+    #             delta = [xyMap[y_i][x_i][0] - currentPosition[0] , xyMap[y_i][x_i][1] - currentPosition[1] ] #17.56%
+                
+    #             theta = currentPosition[2] - np.arctan2(delta[1],delta[0]) #16.24 %
+    #             t1 = time.time()
+    #             #distMap[y_i][x_i] = np.linalg.norm(delta) + abs(np.sin(theta/2)) * TurnPenalty
+    #             distMap[y_i][x_i] = np.sqrt(delta[0]**2 + delta[1]**2) + abs(np.sin(theta/2)) * TurnPenalty  #31.6%
+    #             totaltime.append(time.time()-t1)
+
+    #         else:
+    #             distMap[y_i][x_i] = maxDist + 1
+
+    
+cumtime.append(time.time() - t2)
 
 
-def ThreadTest(a):
-    print("Test Entered")
-    time.sleep(5)
-    print("Test Exited")
-    return a
+print("Time in line: %f" %(np.mean(totaltime)))
+print("Total time: %f" %(np.mean(cumtime)))
+print("Percentage of total: %f" %(100*np.sum(totaltime)/np.sum(cumtime)))
 
+fig = plt.figure()
 
+im = plt.imshow(distMap)
 
-
-x = 2
-async_result = pool.apply_async(ThreadTest, ('T'))
-a = async_result.get()
-
-for i in range(0,10):
-    print(x)
-    time.sleep(1)
-
-
-
-
-
-
-
+plt.show()

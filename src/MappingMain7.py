@@ -252,7 +252,7 @@ def MappingMain1():
 
         #ASYNCHRONOUS FUNCTIONS AND UPDATES
         #Only update map at a given rate (hz)
-        gp_rate = 1; 
+        gp_rate = 5; 
         if time.time() > last_gp_time + 1/gp_rate:
             #Update CPS
             #CPS_map.grid = Count_Map.grid / DwellTime_Map.grid
@@ -325,7 +325,7 @@ def MappingMain1():
 
 
         #Save data for later plotting
-        save_rate = .5; 
+        save_rate = 1; 
         if time.time() > last_save_time + 1/save_rate:
             #Save all desired maps
             #Save Data

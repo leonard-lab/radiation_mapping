@@ -141,6 +141,7 @@ class Map:
 
         return [int(x_i), int(y_i)]
 
+
     def plot_map(self):
         #Plot map
 
@@ -203,8 +204,16 @@ class GP_Map(Map):
         self.Kss = self.Make_Kss()
         self.padding = 16
         self.Kss_Local = self.Make_Kss(localFlag = True)
+        self.xyMap = self.makexyMap()
 
+    def makexyMap(self):
 
+        xyMap = np.zeros([len(self.grid), len(self.grid[0]), 2]) #grid map with each xy position of grid cell center
+
+        for y_i in range(0,len(self.grid)):
+            for x_i in range(0,len(self.grid[y_i])):
+                xyMap[y_i][x_i] = [self.origin_x + x_i * self.resolution, self.origin_y + y_i * self.resolution] 
+        return xyMap
 
     def Make_Kss(self, localFlag = False):
 
@@ -253,7 +262,7 @@ class GP_Map(Map):
 
                         K_ss[y_i][x_i] = np.exp(-1.0 * np.linalg.norm(diff)**2 / (2*self.Lambda**2))
 
-                np.save('Map_Data/Kss_Map_p16xr05', K_ss)
+                #np.save('Map_Data/Kss_Map_p16xr05', K_ss)
 
         return self.sigma_f**2 * K_ss
 
