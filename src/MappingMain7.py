@@ -41,6 +41,7 @@ global Binary_Cost_Map
 global Mask_Map
 global RecordMapParameters
 global GPMapParameters
+global last_cost_update_time 
 
 #Map parameters
 MapWidth = 4.0001
@@ -52,6 +53,9 @@ MaskMapParameters = [-MaskMapWidth/2, -MaskMapWidth/2, 0.05, MaskMapWidth, MaskM
 DwellTime_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'float32')
 Count_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'int16')
 
+
+#Initial Time
+last_cost_update_time = time.time()
 
 
 #---------------CallBacks------------------
@@ -65,7 +69,7 @@ def callback_gamma1(data):
         (trans_gamma, rot_gamma) = listener.lookupTransform('map', '/gamma1_tf',  rospy.Time(0))
 
         #Log radiation counts at appropriate points
-        rospy.loginfo(rospy.get_caller_id() + 'I heard detector 1 at %s', data.data)
+        #rospy.loginfo(rospy.get_caller_id() + 'I heard detector 1 at %s', data.data)
         Count_Map.set_cell(trans_gamma[0], trans_gamma[1], 1, addto=True)
     except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
         pass
@@ -82,7 +86,7 @@ def callback_gamma2(data):
         (trans_gamma, rot_gamma) = listener.lookupTransform('map', '/gamma2_tf',  rospy.Time(0))
 
         #Log radiation counts at appropriate points
-        rospy.loginfo(rospy.get_caller_id() + 'I heard detector 2 at %s', data.data)
+        #rospy.loginfo(rospy.get_caller_id() + 'I heard detector 2 at %s', data.data)
         Count_Map.set_cell(trans_gamma[0], trans_gamma[1], 1, addto=True)
     except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
         pass
@@ -97,7 +101,7 @@ def callback_gamma3(data):
         (trans_gamma, rot_gamma) = listener.lookupTransform('map', '/gamma3_tf',  rospy.Time(0))
 
         #Log radiation counts at appropriate points
-        rospy.loginfo(rospy.get_caller_id() + 'I heard detector 3 at %s', data.data)
+        #rospy.loginfo(rospy.get_caller_id() + 'I heard detector 3 at %s', data.data)
         Count_Map.set_cell(trans_gamma[0], trans_gamma[1], 1, addto=True)
     except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
         pass
@@ -117,9 +121,10 @@ def callback_dwelltimeupdate(data):
 
     
 def callback_costmap(data):
-    threshold = 50
+    threshold = 75
     global last_cost_update_time
     global Binary_Cost_Map
+    global DwellTime_Map
     #rospy.loginfo("Costmap callback")
     map_rate = .5
     if time.time() > last_cost_update_time + 1/map_rate:
@@ -131,6 +136,8 @@ def callback_costmap(data):
             tmp = np.array(data.data)
             tmp = (tmp >= threshold)
             Binary_Cost_Map.grid = tmp.reshape(Binary_Cost_Map.grid.shape[0], Binary_Cost_Map.grid.shape[1])
+
+
             Binary_Cost_Map.last_update = time.time()
         else:
             rospy.loginfo("Problem: Costmap and Binary_Cost_Map out of shape")
@@ -151,13 +158,21 @@ def callback_map(data):
         tmp = np.array(data.data)
         tmp = tmp.reshape(Mask_Map.grid.shape[0], Mask_Map.grid.shape[1])
         # updating Mask_Map. right now it can even reset values (change between 0 and 1)
-        # set mask to 0 where occupancy map is 0
-        Mask_Map.grid[tmp == 0] = 0
-        # set mask to 1 where cost map over threshold
+        # set mask to 1 where occupancy map is 0
+        Mask_Map.grid[tmp == 0] = 1
+        # set mask to 0 where cost map over threshold
         #print(Binary_Cost_Map.grid.dtype)
-        Mask_Map.grid[Binary_Cost_Map.grid] = 1
+        Mask_Map.grid[Binary_Cost_Map.grid] = 0
         # print(len(Mask_Map.grid[Mask_Map.grid == 0]))
         # print(len(Mask_Map.grid[Mask_Map.grid == 1]))
+
+        #Set cells outide of the record maps to -1
+        padStart = (len(Binary_Cost_Map.grid) - len(DwellTime_Map.grid))/2 + 5
+        padEnd = len(DwellTime_Map.grid) + padStart - 5
+        Mask_Map.grid[0:padStart,:] = 0
+        Mask_Map.grid[:,0:padStart] = 0
+        Mask_Map.grid[padEnd:len(Mask_Map.grid),:] = 0
+        Mask_Map.grid[:,padEnd:len(Mask_Map.grid)] = 0
     else:
         rospy.loginfo("Problem: Map and Mask_Map out of shape")
     #rospy.loginfo("Map callback ended (after {:.3f})".format(time.time() - last_map_update_time)) 
@@ -177,13 +192,14 @@ def MappingMain1():
 
 
     #Decision-making parameters
-    threshold = 10
+    Qthreshold = 10
     targetPosition = [0,0,0]
 
     #Set up CPS maps
     CPS_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'float32')
     GP_Map = RadiationMap.GP_Map(*RecordMapParameters)
     Binary_Cost_Map = RadiationMap.Map(*MaskMapParameters, dtype = bool)
+    Q_Map = RadiationMap.Map(*RecordMapParameters)
     #Binary_Cost_Map.grid = np.full((384, 384), False, dtype = bool)
     Mask_Map = RadiationMap.Map(*MaskMapParameters, dtype = bool)
     Mask_Map.grid = np.full((384, 384), -1)
@@ -220,7 +236,6 @@ def MappingMain1():
     last_plot_time = time.time()
     last_target_time = time.time()
     last_save_time = time.time()
-    last_cost_update_time = time.time()
     last_dwell_time = time.time()
     rate = rospy.Rate(ros_rate) # 10hz
 
@@ -237,7 +252,7 @@ def MappingMain1():
 
         #ASYNCHRONOUS FUNCTIONS AND UPDATES
         #Only update map at a given rate (hz)
-        gp_rate = .5; 
+        gp_rate = 1; 
         if time.time() > last_gp_time + 1/gp_rate:
             #Update CPS
             #CPS_map.grid = Count_Map.grid / DwellTime_Map.grid
@@ -252,46 +267,55 @@ def MappingMain1():
 
             #Mask_Map.plot_map()
 
-        plot_rate = .5; 
+        plot_rate = 1; 
         if time.time() > last_plot_time + 1/plot_rate:
             #Update CPS
             #CPS_map.grid = Count_Map.grid / DwellTime_Map.grid
 
             
             #print("Max Grid Value: " + repr(CPS_Map.grid.max()))
-            DwellTime_Map.plot_map()
+            #DwellTime_Map.plot_map()
 
-            CPS_Map.plot_map()
+            #CPS_Map.plot_map()
 
-            GP_Map.plot_map()
+            GP_Map.plot_map([trans[0], trans[1]], [0,15])
+
+            Q_Map.plot_map([trans[0], trans[1]], [0,3])
 
             #Mask_Map.plot_map()
             last_plot_time = time.time()
 
 
         #Choose target and publish
-        target_rate = .5; 
+        target_rate = 5; 
         if time.time() > last_target_time + 1/target_rate:
-            [targetPosition, Q_orig, Q_binary] = TargetSelection([trans[0], trans[1], np.degrees(rot)], GP_Map, Mask_Map, threshold)
-            print(targetPosition)
+            euler_rot = tf.transformations.euler_from_quaternion(rot)
+            #[targetPosition, Q_orig, Q_binary] = TargetSelection([trans[0], trans[1], euler_rot[2]], GP_Map, Mask_Map, Qthreshold, [0,0])
+            [targetPosition, Q_orig, Q_binary] = TargetSelection([trans[0], trans[1], euler_rot[2]], GP_Map, Mask_Map, Qthreshold)
+            Q_Map.grid = Q_binary
             last_target_time = time.time()
-            targetPosition = [0,0,0]
+            #targetPosition = [0,0,0]
 
             #Publish target commands
             euler_rot = tf.transformations.euler_from_quaternion(rot)
-            GoalQuaternion = tf.transformations.quaternion_from_euler(0,0,0)
-            print("GoalQuaternion")
-            print(GoalQuaternion)
+            GoalQuaternion = tf.transformations.quaternion_from_euler(0,0,targetPosition[2])
+            print(targetPosition)
 
 
             GoalSimpletoPublish.pose.position.x = targetPosition[0]
             GoalSimpletoPublish.pose.position.y = targetPosition[1]
-            GoalSimpletoPublish.pose.orientation.w = 1
+            GoalSimpletoPublish.pose.orientation.x = GoalQuaternion[0]
+            GoalSimpletoPublish.pose.orientation.y = GoalQuaternion[1]
+            GoalSimpletoPublish.pose.orientation.z = GoalQuaternion[2]
+            GoalSimpletoPublish.pose.orientation.w = GoalQuaternion[3]
             
 
             GoaltoPublish.goal.target_pose.pose.position.x = targetPosition[0]
             GoaltoPublish.goal.target_pose.pose.position.y = targetPosition[1]
-            GoaltoPublish.goal.target_pose.pose.orientation.w = 1
+            GoaltoPublish.goal.target_pose.pose.orientation.x = GoalQuaternion[0]
+            GoaltoPublish.goal.target_pose.pose.orientation.y = GoalQuaternion[1]
+            GoaltoPublish.goal.target_pose.pose.orientation.z = GoalQuaternion[2]
+            GoaltoPublish.goal.target_pose.pose.orientation.w = GoalQuaternion[3]
 
             #GoaltoPublish.pose.orientation = tf.transformations.quaternion_from_euler(targetPosition[0], targetPosition[1], targetPosition[2])
 
@@ -305,9 +329,9 @@ def MappingMain1():
         if time.time() > last_save_time + 1/save_rate:
             #Save all desired maps
             #Save Data
-            np.save('Map_Data/GP_Map_' + repr(time.time()), GP_Map.grid)
-            np.save('Map_Data/CPS_Map_' + repr(time.time()), CPS_Map.grid)
-            np.save('Map_Data/Mask_Map_' + repr(time.time()), Mask_Map.grid)
+            #np.save('Map_Data/GP_Map_' + repr(time.time()), GP_Map.grid)
+            #np.save('Map_Data/CPS_Map_' + repr(time.time()), CPS_Map.grid)
+            #np.save('Map_Data/Mask_Map_' + repr(time.time()), Mask_Map.grid)
 
             last_save_time = time.time()
 

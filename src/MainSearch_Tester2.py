@@ -15,7 +15,7 @@ from Bloodhound_Functions import *
 
 
 #General Parameters
-T = 10
+T = 60*2
 dt = 0.1
 t = 0
 #currentPosition = [np.random.rand()*3.8-1.9, np.random.rand()*3.8-1.9,np.random.rand()*360]
@@ -26,7 +26,7 @@ robotRadius = 0.1 #robot radius in meters
 threshold = 10
 frameCnt = 0
 timer = [0]*10
-MapWidth = 10.0001
+MapWidth = 4.0001
 RecordMapParameters = [-MapWidth/2, -MapWidth/2, 0.05, MapWidth, MapWidth]
 GPMapParameters = [-MapWidth/2, -MapWidth/2, 0.05, MapWidth, MapWidth]
 
@@ -35,7 +35,7 @@ DwellTime_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'float32')
 Count_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'int16')
 Mask_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'int8')
 CPS_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'float32')
-GP_Map = RadiationMap.GP_Map(*RecordMapParameters)
+GP_Map = RadiationMap.GP_Map(*GPMapParameters)
 print("Maps Created")
 print(DwellTime_Map.grid.shape)
 
@@ -50,8 +50,8 @@ for i in range(0,len(Mask_Map.grid)):
 
 
 #Plot Setup
-lU = 60
-lL = 140
+lU = 0#60
+lL = len(DwellTime_Map.grid)#140
 #PlotList = [[DwellTime_Map.grid, Count_Map.grid],[GP_Map.grid, GP_Map.grid2],[Q_orig,Q_binary]]
 PlotTitles = [["Dwell Time","Counts"],["GP Mean","GP Variance"],["Q","Q after Threshold"]]
 
@@ -101,11 +101,13 @@ def CalcNextLocation(currentPosition, targetPosition, delta_t):
 
     if np.linalg.norm(delta) > dist:
 
-        newPosition = [currentPosition[0] + dist * np.cos(theta), currentPosition[1] + dist * np.sin(theta), np.degrees(theta)]
+        newPosition = [currentPosition[0] + dist * np.cos(theta), currentPosition[1] + dist * np.sin(theta), theta]
 
     else:
-        newPosition = [targetPosition[0], targetPosition[1], np.degrees(theta)]
+        newPosition = [targetPosition[0], targetPosition[1], theta]
 
+    #print("New Position")
+    #print(newPosition)
     return newPosition
 
     #
@@ -150,9 +152,9 @@ while t < T:
 
 
     #Generate radiation
-    sensorPositions = [[currentPosition[0] + robotRadius*np.cos(np.radians(currentPosition[2])), currentPosition[1] + robotRadius*np.sin(np.radians(currentPosition[2]))],
-                        [currentPosition[0] + robotRadius*np.cos(np.radians(currentPosition[2]+120)), currentPosition[1] + robotRadius*np.sin(np.radians(currentPosition[2]+120))],
-                        [currentPosition[0] + robotRadius*np.cos(np.radians(currentPosition[2]+240)), currentPosition[1] + robotRadius*np.sin(np.radians(currentPosition[2]+240))]]
+    sensorPositions = [[currentPosition[0] + robotRadius*np.cos(currentPosition[2]), currentPosition[1] + robotRadius*np.sin(currentPosition[2])],
+                        [currentPosition[0] + robotRadius*np.cos(currentPosition[2]+np.pi*2/3), currentPosition[1] + robotRadius*np.sin(currentPosition[2]+np.pi*2/3)],
+                        [currentPosition[0] + robotRadius*np.cos(currentPosition[2]+np.pi*4/3), currentPosition[1] + robotRadius*np.sin(currentPosition[2]+np.pi*4/3)]]
     for sensor_i in range(0,len(sensorPositions)):
         Sim_Rad[sensor_i] = SimulationRadation(sensorPositions[sensor_i], Radiation_Sources, dt)
 
@@ -188,6 +190,7 @@ while t < T:
         #PlotList = [[DwellTime_Map.grid, Count_Map.grid],[GP_Map.grid, GP_Map.grid2],[Q_orig,Q_binary]]
 
         frame = []
+        print(currentPosition)
 
         for i in range(0,len(PlotList)):
             for k in range(0,len(PlotList[i])):
@@ -197,7 +200,7 @@ while t < T:
                 axarr[i,k].set_title(PlotTitles[i][k])
                 #locationMarker[i][k].remove()
                 #locationMarker[i][k], = axarr[i,k].plot(currentPosition[0], currentPosition[1],c=(255/255,20/255,147/255),marker=(3, 0, currentPosition[2]-90), markersize=10, linestyle='None')
-                locationMarker[i][k] = axarr[i,k].scatter(currentPosition[0], currentPosition[1], c=(255/255,20/255,147/255), marker=(3, 0, currentPosition[2]-90), s = 50)
+                locationMarker[i][k] = axarr[i,k].scatter(currentPosition[0], currentPosition[1], c=(255/255,20/255,147/255), marker=(3, 0, np.degrees(currentPosition[2]-np.pi/2)), s = 50)
                 #locationMarker[i][k].set_data(currentPosition[0], currentPosition[1])
                 #locationMarker[i][k].set_marker((3, 0, currentPosition[2]-90))
                 frame.append(im[i][k])

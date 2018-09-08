@@ -159,13 +159,16 @@ class Map:
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
 
-    def plot_map(self, currentLocation = [0, 0]):
+    def plot_map(self, currentLocation = [0, 0], climits = [0]):
         #Plot map with mocation marked
 
                 #fig = plt.figure()
         if self.im1 == False:
             self.fig= plt.figure()
-            self.im1 = plt.imshow([[1,2],[3,4]], interpolation='none', origin = 'lower', extent = [self.origin_x, self.origin_x+self.width, self.origin_y, self.origin_y+self.height])
+            if len(climits) == 1:
+                self.im1 = plt.imshow([[1,2],[3,4]], interpolation='none', origin = 'lower', extent = [self.origin_x, self.origin_x+self.width, self.origin_y, self.origin_y+self.height])
+            else:
+                self.im1 = plt.imshow([[1,2],[3,4]], interpolation='none', origin = 'lower', extent = [self.origin_x, self.origin_x+self.width, self.origin_y, self.origin_y+self.height], vmin = climits[0], vmax = climits[1])
             self.im2 = plt.scatter(currentLocation[0], currentLocation[1], s = 5, c="black", marker = '*')
             #self.location_marker = plt.scatter([self.last_location[0]],[self.last_location[1]], c='r', s=40)
             plt.show(block = False)
@@ -173,6 +176,7 @@ class Map:
         else:
             #self.im1.set_data(np.rot90(self.grid, k = -1))
             self.im1.set_data(self.grid)
+            #self.im1.changed()
             self.im2 = plt.scatter(currentLocation[0], currentLocation[1], s = 5, c="black", marker = '*')
             #self.location_marker.set_data([self.last_location[0]],[self.last_location[1]])
             
@@ -226,23 +230,30 @@ class GP_Map(Map):
 
                     K_ss[y_i][x_i] = np.exp(-1.0 * np.linalg.norm(diff)**2 / (2*self.Lambda**2))
         else: #Make Kss for local computation
-            y_pts = np.linspace(0, (self.padding*2 + 1)*self.resolution, self.padding*2 + 1, endpoint = False)
-            x_pts = np.linspace(0, (self.padding*2 + 1)*self.resolution, self.padding*2 + 1, endpoint = False)
+            if True:
+                K_ss = np.load('Map_Data/Kss_Map_p16xr05.npy')
+                if self.padding != 16:
+                    print("ALERT: is the correct k_ss being loaded")
+            else:
+                y_pts = np.linspace(0, (self.padding*2 + 1)*self.resolution, self.padding*2 + 1, endpoint = False)
+                x_pts = np.linspace(0, (self.padding*2 + 1)*self.resolution, self.padding*2 + 1, endpoint = False)
 
-            K_ss = np.zeros((len(y_pts)*len(x_pts),len(y_pts)*len(x_pts)))
+                K_ss = np.zeros((len(y_pts)*len(x_pts),len(y_pts)*len(x_pts)))
 
-            for y_i in range(0,len(K_ss)):
-                for x_i in range(0,len(K_ss[y_i])):
-                    y_pt1 = y_pts[int(math.floor(y_i / len(x_pts)))]
-                    x_pt1 = x_pts[y_i % len(x_pts)]
+                for y_i in range(0,len(K_ss)):
+                    for x_i in range(0,len(K_ss[y_i])):
+                        y_pt1 = y_pts[int(math.floor(y_i / len(x_pts)))]
+                        x_pt1 = x_pts[y_i % len(x_pts)]
 
-                    y_pt2 = y_pts[int(math.floor(x_i / len(x_pts)))]
-                    x_pt2 = x_pts[x_i % len(x_pts)]
+                        y_pt2 = y_pts[int(math.floor(x_i / len(x_pts)))]
+                        x_pt2 = x_pts[x_i % len(x_pts)]
 
 
-                    diff = [y_pt1 - y_pt2, x_pt1 - x_pt2]
+                        diff = [y_pt1 - y_pt2, x_pt1 - x_pt2]
 
-                    K_ss[y_i][x_i] = np.exp(-1.0 * np.linalg.norm(diff)**2 / (2*self.Lambda**2))
+                        K_ss[y_i][x_i] = np.exp(-1.0 * np.linalg.norm(diff)**2 / (2*self.Lambda**2))
+
+                np.save('Map_Data/Kss_Map_p16xr05', K_ss)
 
         return self.sigma_f**2 * K_ss
 

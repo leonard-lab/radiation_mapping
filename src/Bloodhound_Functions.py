@@ -2,7 +2,10 @@
 import numpy as np
 import copy
 
-def TargetSelection(currentPosition, GPMap, maskMap, threshold):
+def WraptoPi(angle):
+    return ( angle + np.pi) % (2 * np.pi ) - np.pi
+
+def TargetSelection(currentPosition, GPMap, maskMap, threshold, manualPosition = [np.nan, np.nan]):
     #TargetSelection() : Takes in the position, map of mean, map of variances, and the mask map and uses the satisficing rule to determine the next location to sample
     #currentPosition: current position in x,y,theta coordinates
     #GPMap: map object of GP, containing both mean (grid) and variance (grid2)
@@ -55,10 +58,11 @@ def TargetSelection(currentPosition, GPMap, maskMap, threshold):
         for x_i in range(0,len(xyMap[y_i])):
             xyMap[y_i][x_i] = [GPMap.origin_x + x_i * GPMap.resolution, GPMap.origin_y + y_i * GPMap.resolution]
             if Q[y_i][x_i] > 0:
-                delta = [currentPosition[0] - xyMap[y_i][x_i][0], currentPosition[1] - xyMap[y_i][x_i][1]]
-                theta = np.arctan2(delta[1],delta[0])
+                delta = [xyMap[y_i][x_i][0] - currentPosition[0] , xyMap[y_i][x_i][1] - currentPosition[1] ]
+                theta = currentPosition[2] - np.arctan2(delta[1],delta[0])
                 #distMap[y_i][x_i] = np.linalg.norm(delta) + abs(np.sin(theta/2)) * TurnPenalty
                 distMap[y_i][x_i] = np.sqrt(delta[0]**2 + delta[1]**2) + abs(np.sin(theta/2)) * TurnPenalty
+
             else:
                 distMap[y_i][x_i] = maxDist + 1
 
@@ -67,6 +71,25 @@ def TargetSelection(currentPosition, GPMap, maskMap, threshold):
 
     maxLocation = xyMap[maxLocation_i[0]][maxLocation_i[1]]
 
+    if not np.isnan(manualPosition[0]):
+        maxLocation = [manualPosition[0], manualPosition[1]]
+
+    if len(manualPosition) == 3:
+        theta = manualPosition[2]
+    else:
+        delta = [maxLocation[0] - currentPosition[0], maxLocation[1] - currentPosition[1]]
+        theta = np.arctan2(delta[1],delta[0])
+
+
+    #Testing TurnPenalty Stuff
+    deltap = [maxLocation[0] -currentPosition[0]  , maxLocation[1] - currentPosition[1] ]
+    thetap = currentPosition[2]  - np.arctan2(deltap[1],deltap[0])
+
+    print("Turn Penalty Tests")
+    print(currentPosition)
+    print(maxLocation)
+    print(thetap)
+    print(abs(np.sin(thetap/2)) * TurnPenalty)
 
     #Return x,y location fo target
-    return [maxLocation, Q_orig, Q_binary]
+    return [[maxLocation[0], maxLocation[1], theta], Q_orig, Q_binary]

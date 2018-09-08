@@ -55,7 +55,7 @@ def RadiationSimulator():
     #Radiation source setup
     Radiation_Sources = []
     Radiation_Sources.append(RadiationSource.RadiationSource(2,[0,0],background_flag=True))
-    Radiation_Sources.append(RadiationSource.RadiationSource(500,[0,1]))
+    Radiation_Sources.append(RadiationSource.RadiationSource(500,[0.75,0.75]))
 
     #Control loop rate
     main_rate = 10
