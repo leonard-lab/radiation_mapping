@@ -42,17 +42,17 @@ global Mask_Map
 global RecordMapParameters
 global GPMapParameters
 global last_cost_update_time 
+global Cost_Map
 
 #Map parameters
-MapWidth = 4.0001
+MapWidth = 10.0001
 MaskMapWidth = 19.200001
 RecordMapParameters = [-MapWidth/2, -MapWidth/2, 0.05, MapWidth, MapWidth]
 GPMapParameters = [-MapWidth/2, -MapWidth/2, 0.05, MapWidth, MapWidth]
-MaskMapParameters = [-MaskMapWidth/2, -MaskMapWidth/2, 0.05, MaskMapWidth, MaskMapWidth]
+MaskMapParameters = [-10, -10, 0.05, MaskMapWidth, MaskMapWidth]
 
 DwellTime_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'float32')
 Count_Map = RadiationMap.Map(*RecordMapParameters, dtype = 'int16')
-
 
 #Initial Time
 last_cost_update_time = time.time()
@@ -121,10 +121,20 @@ def callback_dwelltimeupdate(data):
 
     
 def callback_costmap(data):
-    threshold = 75
+    threshold = 67
     global last_cost_update_time
     global Binary_Cost_Map
+    global Cost_Map
     global DwellTime_Map
+
+    #Costmap test function
+    try:
+        (trans, rot_gamma) = listener.lookupTransform('map', '/base_scan',  rospy.Time(0))
+
+        #Log radiation counts at appropriate points
+    except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+        pass
+
     #rospy.loginfo("Costmap callback")
     map_rate = .5
     if time.time() > last_cost_update_time + 1/map_rate:
@@ -134,11 +144,19 @@ def callback_costmap(data):
         #rospy.loginfo(Binary_Cost_Map.grid.shape)
         if Binary_Cost_Map.grid.shape[0] * Binary_Cost_Map.grid.shape[1] == len(data.data):
             tmp = np.array(data.data)
+
+            Cost_Map.updateGrid(tmp.reshape(Binary_Cost_Map.grid.shape[0], Binary_Cost_Map.grid.shape[1]))
+
+            print("Costmap at Current Location")
+            ind = Binary_Cost_Map.xy_to_index(trans[0],trans[1])
+            print(trans)
+            print(tmp.reshape(Binary_Cost_Map.grid.shape[0], Binary_Cost_Map.grid.shape[1])[ind[1]][ind[0]])
+
             tmp = (tmp >= threshold)
-            Binary_Cost_Map.grid = tmp.reshape(Binary_Cost_Map.grid.shape[0], Binary_Cost_Map.grid.shape[1])
+            Binary_Cost_Map.updateGrid( tmp.reshape(Binary_Cost_Map.grid.shape[0], Binary_Cost_Map.grid.shape[1]))
 
 
-            Binary_Cost_Map.last_update = time.time()
+
         else:
             rospy.loginfo("Problem: Costmap and Binary_Cost_Map out of shape")
             print(Binary_Cost_Map.grid.shape[0] * Binary_Cost_Map.grid.shape[1])
@@ -151,23 +169,28 @@ def callback_costmap(data):
 def callback_map(data):
     global Binary_Cost_Map
     global Mask_Map
+    global occupancy_Map
     #rospy.loginfo("Map callback called")
 
     last_map_update_time = time.time()
     if Mask_Map.grid.shape[0] * Mask_Map.grid.shape[1] == len(data.data):
+
         tmp = np.array(data.data)
         tmp = tmp.reshape(Mask_Map.grid.shape[0], Mask_Map.grid.shape[1])
+        occupancy_Map.updateGrid(tmp)
         # updating Mask_Map. right now it can even reset values (change between 0 and 1)
         # set mask to 1 where occupancy map is 0
         Mask_Map.grid[tmp == 0] = 1
         # set mask to 0 where cost map over threshold
         #print(Binary_Cost_Map.grid.dtype)
         Mask_Map.grid[Binary_Cost_Map.grid] = 0
+        Mask_Map.last_update = time.time()
         # print(len(Mask_Map.grid[Mask_Map.grid == 0]))
         # print(len(Mask_Map.grid[Mask_Map.grid == 1]))
 
         #Set cells outide of the record maps to -1
-        padStart = (len(Binary_Cost_Map.grid) - len(DwellTime_Map.grid))/2 + 5
+        padStart = Binary_Cost_Map.xy_to_index(DwellTime_Map.origin_x, DwellTime_Map.origin_y)[0] + 5
+        # padStart = (len(Binary_Cost_Map.grid) - len(DwellTime_Map.grid))/2 + 5
         padEnd = len(DwellTime_Map.grid) + padStart - 5
         Mask_Map.grid[0:padStart,:] = 0
         Mask_Map.grid[:,0:padStart] = 0
@@ -183,16 +206,18 @@ def MappingMain1():
     global Count_Map
     global Binary_Cost_Map
     global Mask_Map
+    global Cost_Map
     global trans
     global listener
     global RecordMapParameters
     global GPMapParameters
+    global occupancy_Map
 
     global last_cost_update_time
 
 
     #Decision-making parameters
-    Qthreshold = 10
+    Qthreshold = 1.6
     targetPosition = [0,0,0]
 
     #Set up CPS maps
@@ -200,8 +225,11 @@ def MappingMain1():
     GP_Map = RadiationMap.GP_Map(*RecordMapParameters)
     Binary_Cost_Map = RadiationMap.Map(*MaskMapParameters, dtype = bool)
     Q_Map = RadiationMap.Map(*RecordMapParameters)
+    Q2_Map = RadiationMap.Map(*RecordMapParameters)
     #Binary_Cost_Map.grid = np.full((384, 384), False, dtype = bool)
     Mask_Map = RadiationMap.Map(*MaskMapParameters, dtype = bool)
+    occupancy_Map = RadiationMap.Map(*MaskMapParameters, dtype = bool)
+    Cost_Map = RadiationMap.Map(*MaskMapParameters, dtype = 'int8')
     Mask_Map.grid = np.full((384, 384), -1)
 
     rospy.loginfo("Maps Created")
@@ -242,7 +270,7 @@ def MappingMain1():
     while not rospy.is_shutdown():
         #Get transform to baselink
         try:
-            (trans, rot) = listener.lookupTransform('map', '/base_link',  rospy.Time(0))
+            (trans, rot) = listener.lookupTransform('map', '/base_scan',  rospy.Time(0))
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             continue
         #print("trans" +  repr(trans))
@@ -260,7 +288,8 @@ def MappingMain1():
             #Update GP
             euler_rot = tf.transformations.euler_from_quaternion(rot)
             GP_Map.Calc_GP_Local(DwellTime_Map, CPS_Map, [trans[0], trans[1], np.degrees(euler_rot[2])])
-            print("Max of GP Map %f: " %(np.max(GP_Map.grid)))
+            GP_Map.last_update = time.time()
+            #print("Max of GP Map %f: " %(np.max(GP_Map.grid)))
 
             last_gp_time = time.time()
             #print("Max Grid Value: " + repr(CPS_Map.grid.max()))
@@ -278,9 +307,14 @@ def MappingMain1():
 
             #CPS_Map.plot_map()
 
-            GP_Map.plot_map([trans[0], trans[1]], [0,15])
+            GP_Map.plot_map([trans[0], trans[1]], [0,5])
+            print("GP var max: %f" %(np.max(GP_Map.grid2)))
 
-            Q_Map.plot_map([trans[0], trans[1]], [0,3])
+            #Binary_Cost_Map.plot_map([trans[0], trans[1]], [0,5])
+
+            #Q_Map.plot_map([trans[0], trans[1]], [-14,14])
+            Q2_Map.plot_map([trans[0], trans[1]], [0,4])
+            #Cost_Map.plot_map([trans[0], trans[1]], [0,100])
 
             #Mask_Map.plot_map()
             last_plot_time = time.time()
@@ -292,14 +326,16 @@ def MappingMain1():
             euler_rot = tf.transformations.euler_from_quaternion(rot)
             #[targetPosition, Q_orig, Q_binary] = TargetSelection([trans[0], trans[1], euler_rot[2]], GP_Map, Mask_Map, Qthreshold, [0,0])
             [targetPosition, Q_orig, Q_binary] = TargetSelection([trans[0], trans[1], euler_rot[2]], GP_Map, Mask_Map, Qthreshold)
-            Q_Map.grid = Q_binary
+            Q_Map.updateGrid(Q_orig)
+            Q2_Map.updateGrid(Q_binary)
+
             last_target_time = time.time()
             #targetPosition = [0,0,0]
 
             #Publish target commands
             euler_rot = tf.transformations.euler_from_quaternion(rot)
             GoalQuaternion = tf.transformations.quaternion_from_euler(0,0,targetPosition[2])
-            print(targetPosition)
+            #print(targetPosition)
 
 
             GoalSimpletoPublish.pose.position.x = targetPosition[0]
@@ -325,13 +361,18 @@ def MappingMain1():
 
 
         #Save data for later plotting
+        run_name = 'run_14/'
         save_rate = 1; 
         if time.time() > last_save_time + 1/save_rate:
             #Save all desired maps
             #Save Data
-            #np.save('Map_Data/GP_Map_' + repr(time.time()), GP_Map.grid)
-            #np.save('Map_Data/CPS_Map_' + repr(time.time()), CPS_Map.grid)
-            #np.save('Map_Data/Mask_Map_' + repr(time.time()), Mask_Map.grid)
+            np.save('Map_Data/' + run_name + 'GP_Map_' + repr(GP_Map.last_update), GP_Map.grid)
+            np.save('Map_Data/' + run_name + 'GP_Map_var' + repr(GP_Map.last_update), GP_Map.grid2)
+            np.save('Map_Data/' + run_name + 'Count_Map_' + repr(Count_Map.last_update), Count_Map.grid)
+            np.save('Map_Data/' + run_name + 'DwellTime_Map_' + repr(DwellTime_Map.last_update), DwellTime_Map.grid)
+            np.save('Map_Data/' + run_name + 'Q_Map_' + repr(Q_Map.last_update), Q_Map.grid)
+            np.save('Map_Data/' + run_name + 'Occ_Map_' + repr(occupancy_Map.last_update), occupancy_Map.grid)
+            np.save('Map_Data/' + run_name + 'Location_' + repr([occupancy_Map.last_update]), [trans[0], trans[1], rot])
 
             last_save_time = time.time()
 
@@ -366,7 +407,7 @@ rosrun radiation_mapping MappingMain1.py
 roslaunch turtlebot3_bringup turtlebot3_robot.launch
 ssh bloodhound@192.168.207.14
 rosrun rqt_tf_tree rqt_tf_tree
-rosrun tf tf_echo /map /base_link
+rosrun tf tf_echo /map /base_scan
 roslaunch turtlebot_teleop keyboard_teleop.launch
 rosrun radiation_mapping Turtlebot_sensor_tf.p
 rosrun rosserial_python serial_node.py _port:=/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_AH06N802-if00-port0 _baud:=57600

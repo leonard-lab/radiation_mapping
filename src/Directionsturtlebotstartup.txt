@@ -16,7 +16,7 @@ roscore
 rosrun radiation_mapping Turtlebot_sensor_tf.py
 roslaunch turtlebot3_slam turtlebot3_slam.launch slam_methods:=frontier_exploration 
 rosrun radiation_mapping MappingMain7.py
-rosun radiation_mapping DwellTimeMapUpdates.py
+rosrun radiation_mapping DwellTimeMapUpdates.py
 
 rosrun radiation_mapping RadiationSimulator.py 
 

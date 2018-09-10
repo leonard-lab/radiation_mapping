@@ -15,7 +15,7 @@ from Bloodhound_Functions import *
 
 
 #General Parameters
-T = 10
+T = 60*5
 dt = 0.1
 t = 0
 #currentPosition = [np.random.rand()*3.8-1.9, np.random.rand()*3.8-1.9,np.random.rand()*360]
@@ -23,7 +23,7 @@ currentPosition = [0,0,0]
 targetPosition = currentPosition
 Sim_Rad = [0,0,0]
 robotRadius = 0.1 #robot radius in meters
-threshold = 10
+threshold = 1.6
 frameCnt = 0
 timer = [0]*10
 MapWidth = 10.0001
@@ -77,13 +77,13 @@ plt.show(block=False)
 #Define radation sources for simulation
 Radiation_Simulation_Flag = False
 Radiation_Sources = []
-Radiation_Sources.append(RadiationSource.RadiationSource(1,[0,0],background_flag=True))
+Radiation_Sources.append(RadiationSource.RadiationSource(.5,[0,0],background_flag=True))
 #Radiation_Sources.append(RadiationSource.RadiationSource(500,[1,1]))
 #Radiation_Sources.append(RadiationSource.RadiationSource(500,[-1,1]))
 #Radiation_Sources.append(RadiationSource.RadiationSource(500,[0,0]))
-Radiation_Sources.append(RadiationSource.RadiationSource(500,[np.random.rand()*4-2, np.random.rand()*4-2]))
-Radiation_Sources.append(RadiationSource.RadiationSource(500,[np.random.rand()*4-2, np.random.rand()*4-2]))
-Radiation_Sources.append(RadiationSource.RadiationSource(500,[np.random.rand()*4-2, np.random.rand()*4-2]))
+Radiation_Sources.append(RadiationSource.RadiationSource(50,[np.random.rand()*MapWidth-MapWidth/2, np.random.rand()*MapWidth-MapWidth/2]))
+Radiation_Sources.append(RadiationSource.RadiationSource(50,[np.random.rand()*MapWidth-MapWidth/2, np.random.rand()*MapWidth-MapWidth/2]))
+Radiation_Sources.append(RadiationSource.RadiationSource(50,[np.random.rand()*MapWidth-MapWidth/2, np.random.rand()*MapWidth-MapWidth/2]))
 
 
 #Relevant simulation specific functions

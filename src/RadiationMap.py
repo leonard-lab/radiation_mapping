@@ -52,6 +52,10 @@ class Map:
         self.im1 = False
         self.last_location = [0,0]
 
+    def updateGrid(self, gridin):
+        self.grid = gridin
+        self.last_update = time.time()
+
     def to_message(self):
         """ Return a nav_msgs/OccupancyGrid representation of this map. """
      
@@ -93,6 +97,7 @@ class Map:
 
         #Temp for checking location
         #self.grid = self.grid*0
+        self.last_update = time.time()
 
         map_indices = self.xy_to_index(x, y)
         if map_indices == False:
@@ -170,7 +175,7 @@ class Map:
                 self.im1 = plt.imshow([[1,2],[3,4]], interpolation='none', origin = 'lower', extent = [self.origin_x, self.origin_x+self.width, self.origin_y, self.origin_y+self.height])
             else:
                 self.im1 = plt.imshow([[1,2],[3,4]], interpolation='none', origin = 'lower', extent = [self.origin_x, self.origin_x+self.width, self.origin_y, self.origin_y+self.height], vmin = climits[0], vmax = climits[1])
-            self.im2 = plt.scatter(currentLocation[0], currentLocation[1], s = 5, c="black", marker = '*')
+            self.im2 = plt.scatter(currentLocation[0], currentLocation[1], s = 10, c="red", marker = '*')
             #self.location_marker = plt.scatter([self.last_location[0]],[self.last_location[1]], c='r', s=40)
             plt.show(block = False)
             print("Map Plot Created")
@@ -178,7 +183,7 @@ class Map:
             #self.im1.set_data(np.rot90(self.grid, k = -1))
             self.im1.set_data(self.grid)
             #self.im1.changed()
-            self.im2 = plt.scatter(currentLocation[0], currentLocation[1], s = 5, c="black", marker = '*')
+            self.im2 = plt.scatter(currentLocation[0], currentLocation[1], s = 10, c="red", marker = '*')
             #self.location_marker.set_data([self.last_location[0]],[self.last_location[1]])
             
             self.fig.canvas.draw()
@@ -212,7 +217,7 @@ class GP_Map(Map):
 
         for y_i in range(0,len(self.grid)):
             for x_i in range(0,len(self.grid[y_i])):
-                xyMap[y_i][x_i] = [self.origin_x + x_i * self.resolution, self.origin_y + y_i * self.resolution] 
+                xyMap[y_i][x_i] = [self.origin_x + x_i * self.resolution + self.resolution/2, self.origin_y + y_i * self.resolution + self.resolution/2] 
         return xyMap
 
     def Make_Kss(self, localFlag = False):
