@@ -1,0 +1,30 @@
+Start up instructions for turtlebot
+
+Turn on turtlebot
+Turn on Laptop
+Connect laptop to geigerrobot network
+
+run the following commands on the laptop:
+sudo /etc/init.d/chrony stop
+sudo ntpdate 192.168.208.1
+sudo /etc/init.d/chrony stop
+
+
+Everything is now ready to run!
+
+
+You can run the robot in two different modes, decribed below.  Each mode will display the SLAM map and rad-UCL maps
+teleop mode: Control the robot using the WASDX keys
+to run: roslaunch radiation_mapping radUCL_Teleop.launch
+
+auto mode:  Robot will drive itself using path planning and rad-UCL
+to run: roslaunch radiation_mapping radUCL_Auto.launch
+
+
+Important notes:
+-Ctrl-C to quit the program.  Sometimes you must hold it.
+-If you wuit out of auto mode the robot will continue running the last available command.  So the motor may keep running.
+-You must restart the robot to fully reset the SLAM map
+-SLAM gets very confused if the robot is moved or if other objects move (such as legs).  
+-THe robot can only see obstacles at the same height as the LIDAR unit.
+

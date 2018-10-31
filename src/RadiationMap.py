@@ -223,7 +223,7 @@ class GP_Map(Map):
     def Make_Kss(self, localFlag = False):
 
         if localFlag == False: #Make Kss for entire map
-            return np.load('Map_Data/Kss_Map_4x4p1.npy') #Shortcut to load saved file
+            return np.load('/home/bloodhound/catkin_ws/src/radiation_mapping/src/Map_Data/Kss_Map_4x4p1.npy') #Shortcut to load saved file
 
             #Make K_ss from my map
             y_pts = np.linspace(self.origin_y, self.origin_y + self.height, len(self.grid), endpoint = False)
@@ -245,7 +245,7 @@ class GP_Map(Map):
                     K_ss[y_i][x_i] = np.exp(-1.0 * np.linalg.norm(diff)**2 / (2*self.Lambda**2))
         else: #Make Kss for local computation
             if True:
-                K_ss = np.load('Map_Data/Kss_Map_p16xr05.npy')
+                K_ss = np.load('/home/bloodhound/catkin_ws/src/radiation_mapping/src/Map_Data/Kss_Map_p16xr05.npy')
                 if self.padding != 16:
                     print("ALERT: is the correct k_ss being loaded")
             else:

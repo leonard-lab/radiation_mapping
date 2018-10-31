@@ -1,0 +1,10 @@
+<launch>
+
+    <include file="$(find radiation_mapping)/launch/radUCL_Map.launch">
+</include>
+
+
+  <node pkg="radiation_mapping" type="MappingMain8_auto.py" name="Mapnode" respawn="true"/> 
+
+
+</launch>

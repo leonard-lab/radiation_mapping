@@ -1,0 +1,12 @@
+<launch>
+
+    <include file="$(find radiation_mapping)/launch/radUCL_Map.launch">
+</include>
+
+    <include file="$(find turtlebot3_teleop)/launch/turtlebot3_teleop_key.launch">
+</include>
+
+  <node pkg="radiation_mapping" type="MappingMain8_recordJ223.py" name="Mapnode" respawn="true"/> 
+
+
+</launch>

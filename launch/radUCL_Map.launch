@@ -1,0 +1,13 @@
+<launch>
+
+    <include file="$(find turtlebot3_slam)/launch/turtlebot3_slam.launch">
+      <arg name="slam_methods" value="frontier_exploration"/> 
+</include>
+
+
+  <node pkg="radiation_mapping" type="Turtlebot_sensor_tf.py" name="TFnode" respawn="true"/> 
+
+  <node pkg="radiation_mapping" type="DwellTimeMapUpdates.py" name="DwellTimenode" respawn="true"/> 
+
+
+</launch>
